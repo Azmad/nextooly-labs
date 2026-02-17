@@ -117,8 +117,8 @@ export default function BackgroundRemoverPage() {
           url="https://labs.nextooly.com/image-background-remover"
         />
       }
-      title="AI Background Remover"
-      description="Remove image backgrounds automatically in 5 seconds. 100% free & private."
+      title="Image Background Remover"
+      description="Remove image backgrounds automatically in seconds. 100% free & private."
       
       // Breadcrumbs
       breadcrumbLabel="Background Remover"

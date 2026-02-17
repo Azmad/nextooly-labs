@@ -367,11 +367,19 @@ export default function ImageBackgroundRemoverTool() {
     if (!state.processedUrl) return;
     try {
       const blob = await generateCompositeImage(state.processedUrl, bgConfig);
+      const url = URL.createObjectURL(blob); // Store in var for clarity
       const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
+      a.href = url;
       a.download = `${state.originalFile?.name?.split('.')[0] || 'edit'}-nextooly.png`;
+      document.body.appendChild(a); // Append to body (safer for some browsers)
       a.click();
-      URL.revokeObjectURL(a.href);
+      document.body.removeChild(a); // Clean up DOM
+
+      // FIX: Wait 100ms before revoking to ensure download starts
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 100);
+      
     } catch (e) { console.error("Download failed", e); }
   }, [state.processedUrl, bgConfig, generateCompositeImage, state.originalFile]);
 

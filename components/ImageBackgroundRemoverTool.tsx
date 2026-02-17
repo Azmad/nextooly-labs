@@ -8,6 +8,14 @@
  * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
 "use client";
@@ -92,7 +100,9 @@ export default function ImageBackgroundRemoverTool() {
   const [bgConfig, setBgConfig] = useState<BackgroundConfig>({ type: 'transparent' });
   const [fitMode, setFitMode] = useState<FitMode>('cover');
   const [blur, setBlur] = useState(0);
-  const [shadow, setShadow] = useState(0);
+  // const [shadow, setShadow] = useState(0);
+  const [brightness, setBrightness] = useState(100); // 100% is default
+  const [contrast, setContrast] = useState(100);   // 100% is default
   const [isDragging, setIsDragging] = useState(false);
 
   const busy = state.status === "downloading-model" || state.status === "processing";
@@ -145,11 +155,7 @@ export default function ImageBackgroundRemoverTool() {
 
         // 2. Draw Foreground with Shadow
         ctx.save();
-        if (shadow > 0) {
-          ctx.shadowColor = "rgba(0,0,0,0.4)";
-          ctx.shadowBlur = shadow * 1.5;
-          ctx.shadowOffsetY = shadow / 2;
-        }
+        ctx.filter = `brightness(${brightness}%) contrast(${contrast}%)`;
         ctx.drawImage(img, 0, 0);
         ctx.restore();
 
@@ -157,7 +163,7 @@ export default function ImageBackgroundRemoverTool() {
       };
       img.src = foregroundUrl;
     });
-  }, [fitMode, blur, shadow]);
+  }, [fitMode, blur, brightness, contrast]);
 
   useEffect(() => {
     return () => {
@@ -182,7 +188,8 @@ export default function ImageBackgroundRemoverTool() {
     setState({ originalFile: null, originalUrl: null, processedUrl: null, processedBlob: null, status: "idle", progress: 0, error: null });
     setBgConfig({ type: 'transparent' });
     setBlur(0);
-    setShadow(0);
+    setBrightness(100);
+    setContrast(100);
   }, []);
 
   const handleFileSelection = useCallback((file: File | null) => {
@@ -194,14 +201,24 @@ export default function ImageBackgroundRemoverTool() {
     if (!state.originalUrl) return;
     try {
       setState(p => ({ ...p, status: "downloading-model", progress: 1 }));
+
       const removeBackground = removeBgFnRef.current || await loadRemoveBackground();
+
       setState(p => ({ ...p, status: "processing", progress: 5 }));
+
       const resultBlob = await removeBackground(state.originalUrl, {
         publicPath: IMGLY_PUBLIC_PATH,
         model: "medium",
-        progress: (_: any, c: number, t: number) => setState(p => ({ ...p, progress: Math.max(p.progress, Math.round((c / t) * 100)) }))
+        // UPDATE THIS LINE: Cap progress at 90%
+        progress: (_: any, c: number, t: number) => setState(p => ({
+          ...p,
+          progress: Math.min(90, Math.max(p.progress, Math.round((c / t) * 100)))
+        }))
       });
+
+      // This final step will instantly jump from 90% -> 100%, feeling "snappy"
       setState(p => ({ ...p, processedBlob: resultBlob, processedUrl: URL.createObjectURL(resultBlob), status: "done", progress: 100 }));
+
     } catch (err: any) { setState(p => ({ ...p, status: "error", error: err.message })); }
   }, [state.originalUrl]);
 
@@ -216,9 +233,12 @@ export default function ImageBackgroundRemoverTool() {
 
   const getPreviewStyle = () => {
     const base: React.CSSProperties = { transition: 'all 0.3s ease' };
+
+    // Combine Blur with Brightness and Contrast
     const filterParts = [];
     if (blur > 0) filterParts.push(`blur(${blur}px)`);
-    if (shadow > 0) filterParts.push(`drop-shadow(0 ${shadow / 2}px ${shadow}px rgba(0,0,0,0.4))`);
+    filterParts.push(`brightness(${brightness}%)`);
+    filterParts.push(`contrast(${contrast}%)`);
 
     const imgStyle: React.CSSProperties = {
       ...base,
@@ -227,7 +247,7 @@ export default function ImageBackgroundRemoverTool() {
       backgroundSize: fitMode === 'fill' ? '100% 100%' : fitMode,
       backgroundPosition: 'center',
       backgroundRepeat: 'no-repeat',
-      filter: filterParts.join(' ') || 'none'
+      filter: filterParts.join(' ')
     };
     return imgStyle;
   };
@@ -309,13 +329,21 @@ export default function ImageBackgroundRemoverTool() {
                     <div className="flex flex-wrap gap-2.5 items-center">
                       <button onClick={() => setBgConfig({ type: 'transparent' })} className={`w-8 h-8 rounded-full border-2 overflow-hidden ${bgConfig.type === 'transparent' ? 'border-blue-600 ring-2 ring-blue-100' : 'border-gray-300'}`}><div className="w-full h-full bg-[url('https://www.transparenttextures.com/patterns/checkerboard-crosshatch.png')] opacity-30" /></button>
                       {['#ffffff', '#000000', '#ff0000', '#00ff00', '#0000ff', '#fbbf24'].map(c => (
-                        <button key={c} onClick={() => setBgConfig({ type: 'color', value: c })} className={`w-8 h-8 rounded-full border-2 transition-transform active:scale-90 ${bgConfig.type === 'color' && bgConfig.value === c ? 'border-blue-600 ring-2 ring-blue-100' : 'border-gray-200'}`} style={{ backgroundColor: c }} />
+                        <button
+                          key={c}
+                          onClick={() => setBgConfig({ type: 'color', value: c })}
+                          className={`w-8 h-8 rounded-lg border-2 transition-transform active:scale-90 ${bgConfig.type === 'color' && bgConfig.value === c
+                              ? 'border-blue-600 ring-2 ring-blue-100'
+                              : 'border shadow-sm' // <--- Changed from border-gray-200
+                            }`}
+                          style={{ backgroundColor: c }}
+                        />
                       ))}
                       {/* <div className="relative w-8 h-8 rounded-full border-2 border-gray-200 overflow-hidden cursor-pointer"><input type="color" className="absolute -top-2 -left-2 w-12 h-12 cursor-pointer p-0 border-0" onChange={e => setBgConfig({ type: 'color', value: e.target.value })} /></div> */}
                       <div
                         className={`relative w-8 h-8 rounded-lg border-2 transition-all active:scale-90 shadow-sm overflow-hidden ${bgConfig.type === 'color' && !['#ffffff', '#000000', '#ff0000', '#00ff00', '#0000ff', '#fbbf24'].includes(bgConfig.value)
-                            ? 'border-blue-600 ring-2 ring-blue-100'
-                            : 'border-gray-200'
+                          ? 'border-blue-600 ring-2 ring-blue-100'
+                          : 'border-gray-200'
                           }`}
                         style={{
                           backgroundColor: bgConfig.type === 'color' ? bgConfig.value : '#ffffff'
@@ -346,14 +374,29 @@ export default function ImageBackgroundRemoverTool() {
                   </div>
 
                   {/* Effects Controls */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                     <div>
-                      <div className="flex justify-between mb-2"><span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Blur</span><span className="text-xs font-bold text-blue-600">{blur}px</span></div>
+                      <div className="flex justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Blur</span>
+                        <span className="text-xs font-bold text-blue-600">{blur}px</span>
+                      </div>
                       <input type="range" min="0" max="25" value={blur} onChange={e => setBlur(parseInt(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
                     </div>
+
                     <div>
-                      <div className="flex justify-between mb-2"><span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Subject Shadow</span><span className="text-xs font-bold text-blue-600">{shadow}px</span></div>
-                      <input type="range" min="0" max="40" value={shadow} onChange={e => setShadow(parseInt(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
+                      <div className="flex justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Brightness</span>
+                        <span className="text-xs font-bold text-blue-600">{brightness}%</span>
+                      </div>
+                      <input type="range" min="50" max="150" value={brightness} onChange={e => setBrightness(parseInt(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Contrast</span>
+                        <span className="text-xs font-bold text-blue-600">{contrast}%</span>
+                      </div>
+                      <input type="range" min="50" max="150" value={contrast} onChange={e => setContrast(parseInt(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
                     </div>
                   </div>
 

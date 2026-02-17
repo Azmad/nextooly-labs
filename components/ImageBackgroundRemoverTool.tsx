@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
+
 "use client";
 
 import React, { useCallback, useState, useRef, useEffect } from "react";
@@ -253,10 +254,9 @@ export default function ImageBackgroundRemoverTool() {
     } catch (e) { console.error(e); }
   };
 
-  // --- Crop Logic: Result (UPDATED TO BE NON-DESTRUCTIVE) ---
+  // --- Crop Logic: Result (NON-DESTRUCTIVE) ---
   const startResultCrop = useCallback(async () => {
     if (!state.processedUrl) return;
-    // FIX: Do NOT bake the background. Use the transparent foreground.
     setTempCompositeUrl(state.processedUrl); 
     setIsCroppingResult(true);
     setZoom(1);
@@ -276,13 +276,7 @@ export default function ImageBackgroundRemoverTool() {
     try {
       const croppedBlob = await getCroppedImg(tempCompositeUrl, croppedAreaPixels);
       const newUrl = URL.createObjectURL(croppedBlob);
-
       setState(prev => ({ ...prev, processedUrl: newUrl, processedBlob: croppedBlob }));
-      
-      // FIX: REMOVED the line that resets background config.
-      // We keep the background setting active.
-      // The processedUrl is still a transparent PNG, just cropped.
-
       cancelResultCrop(); 
     } catch (e) { console.error(e); }
   };
@@ -367,19 +361,14 @@ export default function ImageBackgroundRemoverTool() {
     if (!state.processedUrl) return;
     try {
       const blob = await generateCompositeImage(state.processedUrl, bgConfig);
-      const url = URL.createObjectURL(blob); // Store in var for clarity
+      const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = `${state.originalFile?.name?.split('.')[0] || 'edit'}-nextooly.png`;
-      document.body.appendChild(a); // Append to body (safer for some browsers)
+      document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a); // Clean up DOM
-
-      // FIX: Wait 100ms before revoking to ensure download starts
-      setTimeout(() => {
-        URL.revokeObjectURL(url);
-      }, 100);
-      
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 100);
     } catch (e) { console.error("Download failed", e); }
   }, [state.processedUrl, bgConfig, generateCompositeImage, state.originalFile]);
 
@@ -419,14 +408,15 @@ export default function ImageBackgroundRemoverTool() {
   };
 
   return (
-    <div className="h-screen bg-gray-50 p-4 font-sans overflow-hidden flex flex-col">
-      <div className="w-full max-w-[1600px] mx-auto h-full flex flex-col gap-4">
+    // Changed h-screen to min-h-screen for mobile scrolling
+    <div className="min-h-screen bg-gray-50 p-4 font-sans flex flex-col">
+      <div className="w-full max-w-[1600px] mx-auto flex-1 flex flex-col gap-4">
 
         {/* 1. UPLOAD AREA */}
         {!state.originalUrl && (
-          <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-100 p-10">
+          <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-100 p-6 md:p-10 w-full mt-10">
             <div onDragOver={e => { e.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onDrop={e => { e.preventDefault(); setIsDragging(false); handleFileSelection(e.dataTransfer.files[0]); }}
-              className={`relative group border-2 border-dashed rounded-xl p-12 text-center transition-all cursor-pointer ${isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300 hover:border-blue-400 hover:bg-gray-50"}`}>
+              className={`relative group border-2 border-dashed rounded-xl p-8 md:p-12 text-center transition-all cursor-pointer ${isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300 hover:border-blue-400 hover:bg-gray-50"}`}>
               <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={e => handleFileSelection(e.target.files?.[0] || null)} />
               <div className="flex flex-col items-center">
                 <UploadIcon />
@@ -440,7 +430,7 @@ export default function ImageBackgroundRemoverTool() {
 
         {/* 2. LOADING STATE */}
         {busy && (
-          <div className="max-w-xl mx-auto bg-white p-8 rounded-xl shadow-lg text-center">
+          <div className="max-w-xl mx-auto bg-white p-8 rounded-xl shadow-lg text-center mt-10">
             <div className="h-16 w-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
             <h3 className="text-xl font-bold text-gray-800 mb-2">{state.status === "downloading-model" ? "Loading AI Model..." : "Removing Background..."}</h3>
             <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
@@ -451,41 +441,37 @@ export default function ImageBackgroundRemoverTool() {
 
         {/* 3. MAIN WORKSPACE */}
         {state.originalUrl && !busy && (
-          <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-0 transition-all duration-500 ease-in-out">
+          // Grid for Desktop, Stack for Mobile
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
             {/* LEFT COLUMN: ORIGINAL */}
-            <div className={`${state.status === "done" ? "lg:col-span-4" : "lg:col-span-6 lg:col-start-4"} bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden transition-all duration-500`}>
+            {/* Hidden on mobile if done processing, shown if processing/ready */}
+            <div className={`${state.status === "done" ? "hidden lg:flex lg:col-span-4" : "flex col-span-1 lg:col-span-6 lg:col-start-4"} bg-white rounded-xl shadow-sm border border-gray-200 flex-col overflow-hidden transition-all duration-500 min-h-[50vh] lg:min-h-0`}>
               <div className="p-3 bg-gray-50 border-b flex justify-between items-center h-[53px]">
                 <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">{isCroppingOriginal ? "Crop Mode" : "Original"}</span>
                 {state.status === "ready" && !isCroppingOriginal && (
                   <button onClick={() => { setIsCroppingOriginal(true); setAspect(undefined); setActivePresetId("free"); }} className="flex items-center text-xs bg-white border px-2 py-1 rounded hover:bg-gray-50 font-bold text-gray-700 shadow-sm"><CropIcon /> Crop</button>
                 )}
               </div>
-              <div className="relative flex-1 bg-gray-100 flex items-center justify-center overflow-hidden">
+              <div className="relative flex-1 bg-gray-100 flex items-center justify-center overflow-hidden min-h-[300px]">
                 {isCroppingOriginal ? (
                   <div className="absolute inset-0 bg-black z-10 flex flex-col">
                     <div className="relative flex-1">
                       <Cropper image={state.originalUrl} crop={crop} zoom={zoom} aspect={aspect} onCropChange={setCrop} onCropComplete={handleCropComplete} onZoomChange={setZoom} />
                     </div>
                     {/* ASPECT RATIO CONTROLS */}
-                    <div className="bg-black/90 p-3 border-t border-gray-800 flex justify-center z-50">
-                      <select
-                        value={activePresetId}
-                        onChange={handlePresetChange}
-                        className="bg-gray-800 text-white border border-gray-600 rounded px-3 py-1.5 text-sm font-medium focus:outline-none focus:border-blue-500 w-full max-w-[200px]"
-                      >
-                        {CROP_PRESETS.map((p) => (
-                          <option key={p.id} value={p.id}>{p.label}</option>
-                        ))}
+                    <div className="bg-black/90 p-3 border-t border-gray-800 flex justify-center z-50 safe-area-bottom">
+                      <select value={activePresetId} onChange={handlePresetChange} className="bg-gray-800 text-white border border-gray-600 rounded px-3 py-1.5 text-sm font-medium focus:outline-none focus:border-blue-500 w-full max-w-[200px]">
+                        {CROP_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                       </select>
                     </div>
-                    <div className="p-3 flex justify-center gap-2 bg-black/90 border-t border-gray-800">
+                    <div className="p-3 flex justify-center gap-2 bg-black/90 border-t border-gray-800 safe-area-bottom">
                       <button onClick={() => { setIsCroppingOriginal(false); setZoom(1); }} className="px-4 py-2 bg-white rounded-full text-xs font-bold shadow hover:bg-gray-100">Cancel</button>
                       <button onClick={applyOriginalCrop} className="px-4 py-2 bg-blue-600 text-white rounded-full text-xs font-bold shadow hover:bg-blue-700">Done</button>
                     </div>
                   </div>
                 ) : (
-                  <img src={state.originalUrl} alt="Original" className="max-w-full max-h-full object-contain" />
+                  <img src={state.originalUrl} alt="Original" className="max-w-full max-h-full object-contain p-4" />
                 )}
               </div>
               {state.status === "ready" && (
@@ -497,11 +483,12 @@ export default function ImageBackgroundRemoverTool() {
               )}
             </div>
 
-            {/* RIGHT COLUMN: EDITOR */}
+            {/* RIGHT COLUMN: EDITOR (Result + Toolkit) */}
             {state.status === "done" && (
-              <div className="lg:col-span-8 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col md:flex-row overflow-hidden animate-in slide-in-from-right-8 duration-500 fade-in">
+              <div className="col-span-1 lg:col-span-8 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col lg:flex-row overflow-hidden animate-in slide-in-from-right-8 duration-500 fade-in">
+                
                 {/* MIDDLE: RESULT CANVAS */}
-                <div className="flex-1 flex flex-col min-w-0 border-r border-gray-200">
+                <div className="flex-1 flex flex-col min-w-0 border-b lg:border-b-0 lg:border-r border-gray-200 min-h-[50vh] lg:min-h-0 order-1">
                   <div className="p-3 bg-gray-50 border-b flex justify-between items-center h-[53px]">
                     <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Result</span>
                     {!isCroppingResult && (
@@ -528,18 +515,12 @@ export default function ImageBackgroundRemoverTool() {
                           />
                         </div>
                         {/* RESULT CROP CONTROLS */}
-                        <div className="bg-black/90 p-2 border-t border-gray-800 flex justify-center z-50">
-                          <select
-                            value={activePresetId}
-                            onChange={handlePresetChange}
-                            className="bg-gray-800 text-white border border-gray-600 rounded px-3 py-1.5 text-sm font-medium focus:outline-none focus:border-blue-500 w-full max-w-[200px]"
-                          >
-                            {CROP_PRESETS.map((p) => (
-                              <option key={p.id} value={p.id}>{p.label}</option>
-                            ))}
+                        <div className="bg-black/90 p-2 border-t border-gray-800 flex justify-center z-50 safe-area-bottom">
+                          <select value={activePresetId} onChange={handlePresetChange} className="bg-gray-800 text-white border border-gray-600 rounded px-3 py-1.5 text-sm font-medium focus:outline-none focus:border-blue-500 w-full max-w-[200px]">
+                            {CROP_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                           </select>
                         </div>
-                        <div className="p-3 w-full flex justify-center gap-3 bg-black/90 border-t border-gray-800 z-50">
+                        <div className="p-3 w-full flex justify-center gap-3 bg-black/90 border-t border-gray-800 z-50 safe-area-bottom">
                           <button onClick={cancelResultCrop} className="bg-white px-4 py-2 rounded-full font-bold shadow-lg text-sm hover:bg-gray-100">Cancel</button>
                           <button onClick={applyResultCrop} className="bg-blue-600 text-white px-6 py-2 rounded-full font-bold shadow-lg text-sm hover:bg-blue-700">Apply Crop</button>
                         </div>
@@ -547,7 +528,7 @@ export default function ImageBackgroundRemoverTool() {
                     ) : (
                       <>
                         <Checkerboard />
-                        <div className="relative inline-flex max-w-full max-h-full rounded-lg overflow-hidden shadow-2xl transition-all duration-300">
+                        <div className="relative inline-flex max-w-full max-h-full rounded-lg overflow-hidden shadow-2xl transition-all duration-300 m-4">
                           <div style={getBackgroundStyle()} />
                           {state.processedUrl && (
                             <img src={state.processedUrl} alt="Processed" style={getForegroundStyle()} className="block max-w-full max-h-full object-contain" />
@@ -559,12 +540,13 @@ export default function ImageBackgroundRemoverTool() {
                 </div>
 
                 {/* RIGHT SIDEBAR: TOOLKIT */}
-                <div className={`w-full md:w-[280px] bg-white flex flex-col h-full transition-all duration-300 ${isCroppingResult ? 'opacity-40 pointer-events-none grayscale' : ''}`}>
+                {/* On mobile: Order 2 (below result), Full Width. On Desktop: Fixed Width */}
+                <div className={`w-full lg:w-[320px] bg-white flex flex-col h-auto lg:h-full transition-all duration-300 order-2 border-t lg:border-t-0 ${isCroppingResult ? 'opacity-40 pointer-events-none grayscale' : ''}`}>
                   <div className="p-4 border-b bg-gray-50 flex justify-between items-center h-[53px]">
                     <span className="text-xs font-bold text-gray-900 uppercase tracking-widest">Toolkit</span>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+                  <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar max-h-[40vh] lg:max-h-none">
                     {/* Backgrounds */}
                     <div>
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Background</p>
@@ -585,7 +567,7 @@ export default function ImageBackgroundRemoverTool() {
                         ))}
                       </div>
 
-                      <label className="mt-3 flex items-center justify-center gap-2 w-full py-2 rounded-lg border border-dashed border-gray-300 cursor-pointer hover:bg-gray-50 text-xs font-bold text-gray-600 transition-all">
+                      <label className="mt-3 flex items-center justify-center gap-2 w-full py-3 rounded-lg border border-dashed border-gray-300 cursor-pointer hover:bg-gray-50 text-xs font-bold text-gray-600 transition-all touch-manipulation">
                         <ImageIcon /> Upload Image BG
                         <input type="file" accept="image/*" className="hidden" onChange={handleBgUpload} />
                       </label>
@@ -603,7 +585,7 @@ export default function ImageBackgroundRemoverTool() {
                               <button
                                 key={mode.id}
                                 onClick={() => setFitMode(mode.id as FitMode)}
-                                className={`flex flex-col text-left px-2 py-2 rounded-lg border transition-all ${
+                                className={`flex flex-col text-left px-2 py-2 rounded-lg border transition-all touch-manipulation ${
                                   fitMode === mode.id
                                     ? 'border-blue-600 bg-blue-50 ring-1 ring-blue-600'
                                     : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
@@ -625,26 +607,26 @@ export default function ImageBackgroundRemoverTool() {
                       {bgConfig.type !== 'transparent' && (
                         <div>
                           <div className="flex justify-between mb-1"><span className="text-xs text-gray-600">Blur BG</span><span className="text-xs font-bold text-blue-600">{blur}px</span></div>
-                          <input type="range" min="0" max="20" value={blur} onChange={e => setBlur(parseInt(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
+                          <input type="range" min="0" max="20" value={blur} onChange={e => setBlur(parseInt(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 touch-pan-x" />
                         </div>
                       )}
                       <div>
                         <div className="flex justify-between mb-1"><span className="text-xs text-gray-600">Brightness</span><span className="text-xs font-bold text-blue-600">{brightness}%</span></div>
-                        <input type="range" min="50" max="150" value={brightness} onChange={e => setBrightness(parseInt(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
+                        <input type="range" min="50" max="150" value={brightness} onChange={e => setBrightness(parseInt(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 touch-pan-x" />
                       </div>
                       <div>
                         <div className="flex justify-between mb-1"><span className="text-xs text-gray-600">Contrast</span><span className="text-xs font-bold text-blue-600">{contrast}%</span></div>
-                        <input type="range" min="50" max="150" value={contrast} onChange={e => setContrast(parseInt(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
+                        <input type="range" min="50" max="150" value={contrast} onChange={e => setContrast(parseInt(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 touch-pan-x" />
                       </div>
                     </div>
                   </div>
 
                   {/* Footer */}
-                  <div className="p-4 border-t bg-gray-50 flex flex-col gap-3 mt-auto">
-                    <button onClick={download} className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-md transition-colors flex items-center justify-center">
+                  <div className="p-4 border-t bg-gray-50 flex flex-col gap-3 mt-auto safe-area-bottom">
+                    <button onClick={download} className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-md transition-colors flex items-center justify-center touch-manipulation">
                       <DownloadIcon /> Download
                     </button>
-                    <button onClick={reset} className="w-full py-2 text-gray-500 hover:text-red-600 font-semibold text-xs flex items-center justify-center gap-1 transition-colors">
+                    <button onClick={reset} className="w-full py-2 text-gray-500 hover:text-red-600 font-semibold text-xs flex items-center justify-center gap-1 transition-colors touch-manipulation">
                       <RefreshIcon /> Start Over
                     </button>
                   </div>

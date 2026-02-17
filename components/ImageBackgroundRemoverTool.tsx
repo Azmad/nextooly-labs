@@ -375,13 +375,13 @@ export default function ImageBackgroundRemoverTool() {
 
                   {/* Effects Controls */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                    <div>
+                    {/* <div>
                       <div className="flex justify-between mb-2">
                         <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Blur</span>
                         <span className="text-xs font-bold text-blue-600">{blur}px</span>
                       </div>
                       <input type="range" min="0" max="25" value={blur} onChange={e => setBlur(parseInt(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
-                    </div>
+                    </div> */}
 
                     <div>
                       <div className="flex justify-between mb-2">
